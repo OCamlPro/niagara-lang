@@ -90,23 +90,37 @@ let dot_of_trees p g ts =
 let dot_of_t p g src t =
   match (t : Ir.RedistTree.t) with
   | Fractions { base_shares; balance; branches } ->
-    dot_of_redist p g base_shares
-    @ dot_of_trees p g branches
-    @ (match (balance : Ir.RedistTree.frac_balance) with
-    | BalanceVars b ->
-      begin match b.deficit with
-        | None -> ()
-        | Some v ->
-          let v = add_var p g v in
-          add_edge g v src [label "deficit"]
-      end;
-      begin match b.default with
-        | None -> []
-        | Some v ->
-          let v = add_var p g v in
-          [v, [label "default"]]
-      end
-    | BalanceTree tree -> dot_of_tree p g tree)
+    let balance_dot, balance_tree =
+      match (balance : Ir.RedistTree.frac_balance) with
+      | BalanceVars b ->
+        begin match b.deficit with
+          | None -> ()
+          | Some v ->
+            let v = add_var p g v in
+            add_edge g v src [label "deficit"]
+        end;
+        begin match b.default with
+          | None -> [], Variable.BDT.NoAction
+          | Some v ->
+            let v = add_var p g v in
+            [v, [label "default"]], Variable.BDT.NoAction
+        end
+      | BalanceTree tree -> [], tree
+    in
+    let merged_tree =
+      let mergef _ r1 r2 =
+        match r1, r2 with
+        | None, None -> None
+        | None, r | r, None -> r
+        | Some r1, Some r2 ->
+          Some (Ir.RedistTree.merge_redist0 r1 r2)
+      in
+      List.fold_left (Variable.BDT.merge mergef)
+        (Variable.BDT.merge mergef
+           (Variable.BDT.Action base_shares) balance_tree)
+        branches
+    in
+    dot_of_tree p g merged_tree @ balance_dot
   | Flat fs -> dot_of_trees p g fs
 
 let graph_of_program p =

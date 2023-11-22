@@ -88,6 +88,7 @@ module RedistTree : sig
   val tredist : kind_redist -> kind_tree
   val twhen : (Variable.t * kind_tree) list -> kind_tree
   val tbranch : Variable.t -> kind_tree -> kind_tree -> kind_tree
+  val merge_redist0 : 'a redist -> 'a redist -> 'a redist
   val merge_redist : kind_redist -> kind_redist -> kind_redist
   val add_remainder : Variable.t -> t -> t
   val add_deficit : Variable.t -> t -> t
