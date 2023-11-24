@@ -122,6 +122,8 @@ let empty_world = {
 
 let empty_shape = []
 
+let is_empty_shape s = s = []
+
 let any_projection world = Group.everything_up_to (world.group_repr_size - 1)
 
 let shape_of_everything world = [ any_projection world ]

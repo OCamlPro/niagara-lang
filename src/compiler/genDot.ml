@@ -3,6 +3,20 @@ open Surface
 open Internal
 open Ir
 
+type var_incl_policy = Exact | DepsTo | DepsOf
+
+type filtering = {
+  event_knowledge : bool Variable.Map.t;
+  context : Context.Group.t option;
+  variable_inclusion : (Variable.Set.t * var_incl_policy) option;
+}
+
+let no_filtering = {
+  event_knowledge = Variable.Map.empty;
+  context = None;
+  variable_inclusion = None;
+}
+
 let label s =
   Simple_id "label", Some (Double_quoted_id s)
 
@@ -69,25 +83,25 @@ let dot_of_redist (type a) p g (r : a Ir.RedistTree.redist) =
         (dest, attr)::es)
       fs.balances es
 
-let rec dot_of_tree : type a. program -> graph -> a Ir.RedistTree.tree -> ((id * _ option) * attr list) list =
-  fun p g t ->
-  match t with
+let rec dot_of_tree : type a. filter:filtering -> program -> graph -> a Ir.RedistTree.tree -> ((id * _ option) * attr list) list =
+  fun ~filter p g t ->
+  match Variable.BDT.cut filter.event_knowledge t with
   | NoAction -> []
   | Action r ->
     dot_of_redist p g r
   | Decision (evt, after,before) ->
     let e = add_event p g evt in
-    let bf = dot_of_tree p g before in
-    let af = dot_of_tree p g after in
+    let bf = dot_of_tree ~filter p g before in
+    let af = dot_of_tree ~filter p g after in
     List.iter (fun (bn,l) -> add_edge g e bn ((tlabel "avant")::l)) bf;
     List.iter (fun (an,l) -> add_edge g e an ((tlabel "apres")::l)) af;
     [e, []]
 
-let dot_of_trees p g ts =
-  List.map (dot_of_tree p g) ts
+let dot_of_trees ~filter p g ts =
+  List.map (dot_of_tree ~filter p g) ts
   |> List.flatten
 
-let dot_of_t p g src t =
+let dot_of_t ~filter p g src t =
   match (t : Ir.RedistTree.t) with
   | Fractions { base_shares; balance; branches } ->
     let balance_dot, balance_tree =
@@ -115,15 +129,18 @@ let dot_of_t p g src t =
         | Some r1, Some r2 ->
           Some (Ir.RedistTree.merge_redist0 r1 r2)
       in
-      List.fold_left (Variable.BDT.merge mergef)
+      List.fold_left (fun t tb ->
+          Variable.BDT.merge mergef t
+            (Variable.BDT.cut filter.event_knowledge tb))
         (Variable.BDT.merge mergef
-           (Variable.BDT.Action base_shares) balance_tree)
+           (Variable.BDT.Action base_shares)
+           (Variable.BDT.cut filter.event_knowledge balance_tree))
         branches
     in
-    dot_of_tree p g merged_tree @ balance_dot
-  | Flat fs -> dot_of_trees p g fs
+    dot_of_tree ~filter p g merged_tree @ balance_dot
+  | Flat fs -> dot_of_trees ~filter p g fs
 
-let graph_of_program p =
+let graph_of_program p filter =
   let graph = {
     strict = false;
     kind = Digraph;
@@ -134,16 +151,29 @@ let graph_of_program p =
   }
   in
   Variable.Map.iter (fun v t ->
-      let src = add_var p graph v in
-      let es = dot_of_t p graph src t in
-      List.iter (fun (e,a) ->
-          add_edge graph src e a)
-        es)
+      let is_included =
+        match filter.variable_inclusion with
+        | None -> true
+        | Some (vars, _) -> Variable.Set.mem v vars
+      in
+      let match_context =
+        match filter.context with
+        | None -> true
+        | Some ctx ->
+          let s = Variable.Map.find v p.infos.var_shapes in
+          not (Context.is_empty_shape (Context.shape_overlap_subshape s ctx))
+      in
+      if is_included || match_context then
+        let src = add_var p graph v in
+        let es = dot_of_t ~filter p graph src t in
+        List.iter (fun (e,a) ->
+            add_edge graph src e a)
+          es)
     p.trees;
   graph
 
-let dot_srting_of_program p =
-  string_of_graph @@ graph_of_program p
+let dot_srting_of_program p filter =
+  string_of_graph @@ graph_of_program p filter
 
-let dot_of_program p =
-  print_file "graph.dot" @@ graph_of_program p
+let dot_of_program p filter =
+  print_file "graph.dot" @@ graph_of_program p filter

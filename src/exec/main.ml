@@ -27,7 +27,10 @@ let gnu_style_term =
 let compile : string -> unit = fun path ->
   let src_program = Grammar.ParserMain.parse_program path in
   let p = Compiler.Compile.compile src_program in
-  (* Compiler.GenDot.dot_of_program p *)
+  (* let event_knowledge = *)
+  (*   Variable.Map.map (fun _ -> true) p.events *)
+  (* in *)
+  (* Compiler.GenDot.dot_of_program p ~event_knowledge *)
   Test_interp.test p
 
 (** [a -+ b] composes the terms [a] and [b] but ignores the
