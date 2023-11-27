@@ -27,10 +27,12 @@ let gnu_style_term =
 let compile : string -> unit = fun path ->
   let src_program = Grammar.ParserMain.parse_program path in
   let p = Compiler.Compile.compile src_program in
-  (* let event_knowledge = *)
-  (*   Variable.Map.map (fun _ -> true) p.events *)
-  (* in *)
-  (* Compiler.GenDot.dot_of_program p ~event_knowledge *)
+  let filter = Compiler.GenDot.{
+    no_filtering with
+    variable_inclusion = Some (Variable.Set.singleton (Obj.magic 83), DepsOf)
+  }
+  in
+  Compiler.GenDot.dot_of_program p filter;
   Test_interp.test p
 
 (** [a -+ b] composes the terms [a] and [b] but ignores the
